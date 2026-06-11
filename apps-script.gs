@@ -17,17 +17,22 @@
 const ABA_PALPITES = "Palpites";
 const ABA_RESULTADOS = "Resultados";
 
-// Cria as abas com cabeçalho. Rode UMA vez.
-function configurar() {
+// Garante que a aba existe (cria com cabeçalho se não existir)
+function garanteAba(nome, cabecalho) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (!ss.getSheetByName(ABA_PALPITES)) {
-    ss.insertSheet(ABA_PALPITES).appendRow(["Quando", "Nome", "Palpites (JSON)"]);
+  let aba = ss.getSheetByName(nome);
+  if (!aba) {
+    aba = ss.insertSheet(nome);
+    aba.appendRow(cabecalho);
   }
-  if (!ss.getSheetByName(ABA_RESULTADOS)) {
-    const aba = ss.insertSheet(ABA_RESULTADOS);
-    aba.appendRow(["Jogo", "Gols time 1", "Gols time 2"]);
-    aba.getRange("A2").setNote("Preencha conforme os jogos terminam. Ex: 1 | 2 | 0");
-  }
+  return aba;
+}
+
+// Cria as abas com cabeçalho. Rode UMA vez (ou deixe que o site crie sozinho).
+function configurar() {
+  garanteAba(ABA_PALPITES, ["Quando", "Nome", "Palpites (JSON)"]);
+  const res = garanteAba(ABA_RESULTADOS, ["Jogo", "Gols time 1", "Gols time 2"]);
+  res.getRange("A2").setNote("Preencha conforme os jogos terminam. Ex: 1 | 2 | 0");
 }
 
 // Recebe os palpites enviados pelo site
@@ -39,8 +44,7 @@ function doPost(e) {
       return resposta({ ok: false, erro: "dados incompletos" });
     }
     // O horário registrado é o DO SERVIDOR — ninguém adianta o relógio
-    SpreadsheetApp.getActiveSpreadsheet()
-      .getSheetByName(ABA_PALPITES)
+    garanteAba(ABA_PALPITES, ["Quando", "Nome", "Palpites (JSON)"])
       .appendRow([new Date(), nome, JSON.stringify(dados.palpites)]);
     return resposta({ ok: true });
   } catch (err) {
@@ -50,8 +54,7 @@ function doPost(e) {
 
 // Devolve palpites + resultados pro site montar a apuração
 function doGet() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const palpites = ss.getSheetByName(ABA_PALPITES)
+  const palpites = garanteAba(ABA_PALPITES, ["Quando", "Nome", "Palpites (JSON)"])
     .getDataRange().getValues().slice(1)
     .filter(l => l[1])
     .map(l => ({
@@ -60,7 +63,7 @@ function doGet() {
       palpites: JSON.parse(l[2] || "{}"),
     }));
   const resultados = {};
-  ss.getSheetByName(ABA_RESULTADOS)
+  garanteAba(ABA_RESULTADOS, ["Jogo", "Gols time 1", "Gols time 2"])
     .getDataRange().getValues().slice(1)
     .forEach(l => {
       if (l[0] !== "" && l[1] !== "" && l[2] !== "") {
