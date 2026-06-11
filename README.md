@@ -17,28 +17,39 @@ o que ninguém ganhar vira **cesta básica** no final.
 
 ## 🎯 Como participar
 
-1. Abra o site do bolão (GitHub Pages deste repositório).
+1. Abra o link do bolão.
 2. Digite seu **nome** e preencha os **placares**.
-3. Clique em **ENVIAR PALPITES** → mande pro organizador por WhatsApp (ou baixe o arquivo).
-4. Pague sua cota por PIX pro organizador. Tá valendo!
+3. Clique em **ENVIAR PALPITES** — eles são salvos automaticamente na planilha do bolão.
+4. Faça o **PIX de R$ 144** (fase de grupos) para **Diego — chave 02493690109**. Tá valendo!
 
 ## 🔧 Manual do organizador
 
-### Registrar palpites
-Quando alguém enviar palpites, copie o bloco JSON da mensagem e cole dentro da lista em
-[palpites.js](palpites.js), separado por vírgula. Faça o commit **antes do jogo começar** —
-o histórico do Git é o juiz do horário.
+### Modo automático (recomendado): Planilha Google
+Os palpites caem direto numa Planilha Google, sem você fazer nada:
 
-### Lançar resultados
-Conforme os jogos terminam, preencha [resultados.js](resultados.js):
+1. Crie uma planilha em [sheets.google.com](https://sheets.google.com).
+2. **Extensões → Apps Script**, apague tudo e cole o conteúdo de [apps-script.gs](apps-script.gs).
+3. Rode a função `configurar` uma vez (botão ▶) e autorize.
+4. **Implantar → Nova implantação → App da Web** — executar como **você**, acesso: **qualquer pessoa**.
+5. Copie a URL gerada (termina em `/exec`) e cole em `CONFIG.urlPlanilha` no [index.html](index.html).
+
+Pronto: cada envio vira uma linha na aba **Palpites** (com horário do servidor — impossível
+trapacear o relógio), e os **resultados** você digita na aba **Resultados** da própria planilha
+(jogo, gols do time 1, gols do time 2). O site monta a apuração sozinho.
+
+Se alguém enviar palpites mais de uma vez, vale o último envio **antes do início de cada jogo** —
+palpite atrasado é ignorado automaticamente.
+
+### Modo manual (plano B, sem planilha)
+Deixe `CONFIG.urlPlanilha` vazia. Os palpites chegam por WhatsApp com um bloco JSON;
+cole-os em [palpites.js](palpites.js) e commite **antes do jogo começar** (o histórico do Git
+é o juiz do horário). Resultados em [resultados.js](resultados.js):
 
 ```js
-const RESULTADOS = {
+let RESULTADOS = {
   1: [2, 1],   // México 2x1 África do Sul
 };
 ```
-
-A apuração (ranking, potes, fundo de cestas) é calculada automaticamente pelo site.
 
 ### Publicar o site (GitHub Pages)
 1. Crie um repositório público no GitHub e suba estes arquivos.
@@ -58,7 +69,8 @@ whatsappOrganizador: "5511999998888",
 |---|---|
 | `index.html` | O site do bolão (palpites, apuração, regras) |
 | `jogos.js` | Tabela dos jogos (datas em horário de Brasília) |
-| `palpites.js` | Palpites registrados pelo organizador |
-| `resultados.js` | Resultados oficiais, jogo a jogo |
+| `apps-script.gs` | Script da Planilha Google (modo automático) |
+| `palpites.js` | Palpites registrados à mão (modo manual) |
+| `resultados.js` | Resultados lançados à mão (modo manual) |
 
 🧺 *No final, ganha quem acertou — e ganha também quem precisa.*

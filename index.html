@@ -258,6 +258,18 @@
     resize: vertical;
   }
   .modal .acoes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+  .pix-box {
+    background: linear-gradient(135deg, #e2f7e9, #c8efd6);
+    border: 3px dashed #1faa53;
+    border-radius: 14px;
+    padding: 16px;
+    margin: 14px 0;
+    font-size: 16px;
+    line-height: 1.7;
+  }
+  .pix-box .btn.mini { font-size: 13px; padding: 7px 14px; margin-left: 6px; }
+  #detalhe-manual summary { cursor: pointer; font-weight: 700; color: var(--azul); margin: 10px 0; }
+  #detalhe-manual textarea { margin-top: 10px; }
   .btn {
     font-family: "Lilita One"; font-size: 15px;
     border: none; border-radius: 10px;
@@ -408,7 +420,8 @@
         <li>O palpite é o <b>placar exato do tempo normal</b> (90 minutos + acréscimos). Prorrogação e pênaltis não contam.</li>
         <li><b>Acertou o placar exato → leva o pote do jogo.</b> Se mais de uma pessoa acertar, o pote é dividido igualmente.</li>
         <li><b>Ninguém acertou?</b> O pote daquele jogo vai para o <b>fundo de cestas básicas</b> 🧺, doado no final da Copa.</li>
-        <li>O palpite só vale se for registrado <b>antes de a bola rolar</b>. O registro no GitHub (data do commit) é a prova pública do horário — ninguém dá uma de espertinho.</li>
+        <li>O palpite só vale se for registrado <b>antes de a bola rolar</b>. O horário é gravado automaticamente no registro (servidor do Google / commit no GitHub) — ninguém dá uma de espertinho.</li>
+        <li>💸 <b>Pagamento por PIX</b> para <b>Diego</b> — chave: <b>02493690109</b>. Fase de grupos: 72 jogos × R$ 2 = <b>R$ 144</b> por pessoa, pagos na inscrição. Palpite sem PIX não concorre!</li>
         <li>Quem não palpitar em algum jogo continua pagando os R$ 2 daquele pote, só não concorre. (Mais chance de virar cesta básica! 😄)</li>
         <li>Os jogos do <b>mata-mata</b> entram na tabela assim que os confrontos forem definidos, e abre nova rodada de palpites.</li>
       </ol>
@@ -431,13 +444,23 @@
 <!-- modal de envio -->
 <div class="veu" id="veu">
   <div class="modal">
-    <h2>🎉 Palpites prontos!</h2>
-    <p>Manda pro organizador do bolão por WhatsApp, ou copia o código abaixo. Ele registra no GitHub e tá valendo!</p>
-    <textarea id="saida" readonly></textarea>
+    <h2 id="modal-titulo">🎉 Palpites prontos!</h2>
+    <p id="modal-status"></p>
+    <div class="pix-box">
+      💸 Agora garante tua vaga: <b>PIX de <span id="pix-valor"></span></b><br>
+      Chave: <b id="pix-chave"></b> (<span id="pix-nome"></span>)
+      <button class="btn copiar mini" id="btn-pix">📋 Copiar chave</button>
+    </div>
+    <details id="detalhe-manual">
+      <summary>Ver mensagem pro WhatsApp (plano B)</summary>
+      <textarea id="saida" readonly></textarea>
+      <div class="acoes">
+        <button class="btn zap" id="btn-zap">💬 Enviar no WhatsApp</button>
+        <button class="btn copiar" id="btn-copiar">📋 Copiar código</button>
+        <button class="btn baixar" id="btn-baixar">💾 Baixar arquivo</button>
+      </div>
+    </details>
     <div class="acoes">
-      <button class="btn zap" id="btn-zap">💬 Enviar no WhatsApp</button>
-      <button class="btn copiar" id="btn-copiar">📋 Copiar código</button>
-      <button class="btn baixar" id="btn-baixar">💾 Baixar arquivo</button>
       <button class="btn fechar" id="btn-fechar">Fechar</button>
     </div>
   </div>
@@ -454,6 +477,12 @@ const CONFIG = {
   valorPorJogo: 2,
   // Número do WhatsApp do organizador com DDI+DDD, só dígitos. Ex: "5511999998888"
   whatsappOrganizador: "",
+  // PIX do organizador — aparece nas regras e depois do envio
+  pix: { chave: "02493690109", nome: "Diego" },
+  // URL do App da Web do Apps Script (termina em /exec).
+  // Com ela preenchida, os palpites são salvos AUTOMATICAMENTE na planilha.
+  // Vazia, o site funciona no modo manual (WhatsApp). Veja apps-script.gs.
+  urlPlanilha: "",
 };
 
 // bandeiras como imagem (emoji de bandeira não aparece no Windows)
@@ -600,11 +629,43 @@ function textoZap(envio) {
   return t;
 }
 
-document.getElementById("btn-enviar").addEventListener("click", () => {
+document.getElementById("btn-enviar").addEventListener("click", async () => {
   const envio = montaEnvio();
   if (!envio) return;
   document.getElementById("saida").value = textoZap(envio);
+  document.getElementById("pix-chave").textContent = CONFIG.pix.chave;
+  document.getElementById("pix-nome").textContent = CONFIG.pix.nome;
+  document.getElementById("pix-valor").textContent =
+    fmtReal(CONFIG.valorPorJogo * JOGOS.length) + ` (${JOGOS.length} jogos × ${fmtReal(CONFIG.valorPorJogo)})`;
+  const status = document.getElementById("modal-status");
+  const titulo = document.getElementById("modal-titulo");
   document.getElementById("veu").classList.add("aberto");
+
+  if (CONFIG.urlPlanilha) {
+    titulo.textContent = "⏳ Enviando...";
+    status.textContent = "Registrando seus palpites na planilha do bolão...";
+    try {
+      const r = await fetch(CONFIG.urlPlanilha, { method: "POST", body: JSON.stringify(envio) });
+      const resp = await r.json();
+      if (!resp.ok) throw new Error(resp.erro || "erro");
+      titulo.textContent = "✅ Palpites registrados!";
+      status.textContent = `Pronto, ${envio.nome}! Seus palpites já estão salvos na planilha oficial do bolão. Tá valendo!`;
+      carregarDaPlanilha();
+    } catch (err) {
+      titulo.textContent = "⚠️ Não consegui salvar automaticamente";
+      status.textContent = "Sem crise: manda a mensagem pro organizador pelo WhatsApp ali embaixo que vale do mesmo jeito.";
+      document.getElementById("detalhe-manual").open = true;
+    }
+  } else {
+    titulo.textContent = "🎉 Palpites prontos!";
+    status.textContent = "Manda pro organizador pelo WhatsApp (abre o plano B ali embaixo) e faz o PIX. Tá valendo!";
+    document.getElementById("detalhe-manual").open = true;
+  }
+});
+document.getElementById("btn-pix").addEventListener("click", async (e) => {
+  await navigator.clipboard.writeText(CONFIG.pix.chave);
+  e.target.textContent = "✅ Copiada!";
+  setTimeout(() => e.target.textContent = "📋 Copiar chave", 1800);
 });
 document.getElementById("btn-fechar").addEventListener("click", () => document.getElementById("veu").classList.remove("aberto"));
 document.getElementById("btn-zap").addEventListener("click", () => {
@@ -728,8 +789,44 @@ function renderSelos() {
     PALPITES.length && Object.keys(RESULTADOS).length ? fmtReal(apurar().fundoCesta) : "R$ 0";
 }
 
+// ---------- planilha Google (modo automático) ----------
+// Junta os envios por pessoa: vale o ÚLTIMO palpite de cada jogo
+// enviado ANTES de a bola rolar (horário do servidor do Google).
+function mesclarEnvios(envios) {
+  const inicio = {};
+  JOGOS.forEach(j => inicio[j.id] = new Date(j.data).getTime());
+  const porNome = new Map();
+  envios.sort((a, b) => new Date(a.enviadoEm) - new Date(b.enviadoEm));
+  for (const e of envios) {
+    const chave = e.nome.trim().toLowerCase();
+    if (!porNome.has(chave)) porNome.set(chave, { nome: e.nome.trim(), palpites: {} });
+    const t = new Date(e.enviadoEm).getTime();
+    for (const id in e.palpites) {
+      if (inicio[id] && t < inicio[id]) porNome.get(chave).palpites[id] = e.palpites[id];
+    }
+  }
+  return [...porNome.values()];
+}
+
+async function carregarDaPlanilha() {
+  if (!CONFIG.urlPlanilha) return;
+  try {
+    const r = await fetch(CONFIG.urlPlanilha);
+    const dados = await r.json();
+    PALPITES = mesclarEnvios(dados.palpites || []);
+    RESULTADOS = dados.resultados || {};
+    renderSelos();
+    const tela = document.querySelector("nav button.ativo").dataset.tela;
+    if (tela === "palpites") { chipSelecionado = null; renderPalpites(); }
+    if (tela === "apuracao") renderApuracao();
+  } catch (err) {
+    console.warn("Planilha indisponível, usando palpites.js/resultados.js", err);
+  }
+}
+
 renderJogos();
 renderSelos();
+carregarDaPlanilha();
 </script>
 </body>
 </html>

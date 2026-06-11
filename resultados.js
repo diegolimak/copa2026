@@ -7,6 +7,8 @@
 // Exemplo:
 // 1: [2, 1],   // México 2x1 África do Sul
 
-const RESULTADOS = {
+// OBS: se a planilha Google estiver configurada, os resultados vêm da aba
+// "Resultados" da planilha e este arquivo vira só um plano B.
+let RESULTADOS = {
 
 };

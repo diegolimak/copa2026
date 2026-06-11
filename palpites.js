@@ -13,6 +13,8 @@
 //   "palpites": { "1": [2, 0], "2": [1, 1], "3": [3, 1] }
 // },
 
-const PALPITES = [
+// OBS: se a planilha Google estiver configurada (CONFIG.urlPlanilha no index.html),
+// os palpites vêm de lá automaticamente e esta lista vira só um plano B.
+let PALPITES = [
 
 ];
