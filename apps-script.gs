@@ -1,75 +1,91 @@
 // =====================================================
 // BOLÃO DA COPA 2026 — script da Planilha Google
 // =====================================================
-// COMO INSTALAR (5 minutos, uma vez só):
-// 1. Crie uma planilha nova em sheets.google.com
-// 2. Menu Extensões → Apps Script
-// 3. Apague tudo e cole este arquivo inteiro
-// 4. Rode a função "configurar" uma vez (botão ▶ Executar)
-//    e autorize quando o Google pedir
-// 5. Botão azul "Implantar" → Nova implantação → tipo "App da Web"
+// COMO INSTALAR (uma vez só):
+// 1. Crie uma planilha em sheets.google.com
+// 2. Extensões → Apps Script → apague tudo → cole este arquivo
+// 3. Botão "Implantar" → Nova implantação → App da Web
 //    - Executar como: VOCÊ
 //    - Quem pode acessar: QUALQUER PESSOA
-// 6. Copie a URL gerada (termina em /exec) e cole no index.html,
-//    em CONFIG.urlPlanilha
+// 4. Copie a URL /exec e cole em CONFIG.urlPlanilha no index.html
+// NÃO precisa rodar "configurar" manualmente — cria tudo sozinho.
 // =====================================================
 
-const ABA_PALPITES = "Palpites";
+const ABA_PALPITES   = "Palpites";
 const ABA_RESULTADOS = "Resultados";
 
-// Garante que a aba existe (cria com cabeçalho se não existir)
 function garanteAba(nome, cabecalho) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let aba = ss.getSheetByName(nome);
   if (!aba) {
     aba = ss.insertSheet(nome);
     aba.appendRow(cabecalho);
+    aba.setFrozenRows(1);
+  } else {
+    // adiciona colunas que faltam (ex: quando o script é atualizado)
+    const atual = aba.getLastColumn();
+    for (let i = atual; i < cabecalho.length; i++) {
+      aba.getRange(1, i + 1).setValue(cabecalho[i]);
+    }
   }
   return aba;
 }
 
-// Cria as abas com cabeçalho. Rode UMA vez (ou deixe que o site crie sozinho).
+// Rode manualmente se quiser pré-criar as abas com nota explicativa
 function configurar() {
-  garanteAba(ABA_PALPITES, ["Quando", "Nome", "Palpites (JSON)"]);
-  const res = garanteAba(ABA_RESULTADOS, ["Jogo", "Gols time 1", "Gols time 2"]);
-  res.getRange("A2").setNote("Preencha conforme os jogos terminam. Ex: 1 | 2 | 0");
+  const res = garanteAba(ABA_RESULTADOS,
+    ["Jogo #", "Gols time 1", "Gols time 2"]);
+  res.getRange("A2").setNote(
+    "Preencha conforme os jogos terminam.\nEx: jogo 1 → 1 | 2 | 0  significa 2×0\nO site atualiza automaticamente.");
+  garanteAba(ABA_PALPITES,
+    ["Quando (servidor)", "Nome", "Sobrenome", "Telefone", "Filtro", "Palpites (JSON)"]);
 }
 
-// Recebe os palpites enviados pelo site
+// Recebe palpites enviados pelo site
 function doPost(e) {
   try {
-    const dados = JSON.parse(e.postData.contents);
-    const nome = String(dados.nome || "").trim().slice(0, 40);
-    if (!nome || !dados.palpites || typeof dados.palpites !== "object") {
+    const d = JSON.parse(e.postData.contents);
+    const nome      = String(d.nome      || "").trim().slice(0, 30);
+    const sobrenome = String(d.sobrenome || "").trim().slice(0, 40);
+    const telefone  = String(d.telefone  || "").trim().slice(0, 20);
+    const filtro    = String(d.filtro    || "todos");
+    if (!nome || !d.palpites || typeof d.palpites !== "object") {
       return resposta({ ok: false, erro: "dados incompletos" });
     }
-    // O horário registrado é o DO SERVIDOR — ninguém adianta o relógio
-    garanteAba(ABA_PALPITES, ["Quando", "Nome", "Palpites (JSON)"])
-      .appendRow([new Date(), nome, JSON.stringify(dados.palpites)]);
+    garanteAba(ABA_PALPITES,
+      ["Quando (servidor)", "Nome", "Sobrenome", "Telefone", "Filtro", "Palpites (JSON)"])
+      .appendRow([new Date(), nome, sobrenome, telefone, filtro, JSON.stringify(d.palpites)]);
     return resposta({ ok: true });
   } catch (err) {
     return resposta({ ok: false, erro: String(err) });
   }
 }
 
-// Devolve palpites + resultados pro site montar a apuração
+// Devolve palpites + resultados para o site montar a apuração
 function doGet() {
-  const palpites = garanteAba(ABA_PALPITES, ["Quando", "Nome", "Palpites (JSON)"])
-    .getDataRange().getValues().slice(1)
+  const abaPal = garanteAba(ABA_PALPITES,
+    ["Quando (servidor)", "Nome", "Sobrenome", "Telefone", "Filtro", "Palpites (JSON)"]);
+  const abaRes = garanteAba(ABA_RESULTADOS,
+    ["Jogo #", "Gols time 1", "Gols time 2"]);
+
+  const palpites = abaPal.getDataRange().getValues().slice(1)
     .filter(l => l[1])
     .map(l => ({
-      enviadoEm: new Date(l[0]).toISOString(),
-      nome: String(l[1]),
-      palpites: JSON.parse(l[2] || "{}"),
+      enviadoEm : new Date(l[0]).toISOString(),
+      nome      : String(l[1]),
+      sobrenome : String(l[2] || ""),
+      telefone  : String(l[3] || ""),
+      filtro    : String(l[4] || "todos"),
+      palpites  : JSON.parse(l[5] || "{}"),
     }));
+
   const resultados = {};
-  garanteAba(ABA_RESULTADOS, ["Jogo", "Gols time 1", "Gols time 2"])
-    .getDataRange().getValues().slice(1)
-    .forEach(l => {
-      if (l[0] !== "" && l[1] !== "" && l[2] !== "") {
-        resultados[Number(l[0])] = [Number(l[1]), Number(l[2])];
-      }
-    });
+  abaRes.getDataRange().getValues().slice(1).forEach(l => {
+    if (l[0] !== "" && l[1] !== "" && l[2] !== "") {
+      resultados[Number(l[0])] = [Number(l[1]), Number(l[2])];
+    }
+  });
+
   return resposta({ palpites, resultados });
 }
 
