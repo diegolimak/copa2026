@@ -34,8 +34,12 @@ Os palpites caem direto numa Planilha Google, sem você fazer nada:
 5. Copie a URL gerada (termina em `/exec`) e cole em `CONFIG.urlPlanilha` no [index.html](index.html).
 
 Pronto: cada envio vira uma linha na aba **Palpites** (com horário do servidor — impossível
-trapacear o relógio), e os **resultados** você digita na aba **Resultados** da própria planilha
-(jogo, gols do time 1, gols do time 2). O site monta a apuração sozinho.
+trapacear o relógio), e os **resultados** você digita na aba **Resultados** da própria planilha.
+O site monta a apuração sozinho.
+
+**Dica:** rode a função `preencherResultados` uma vez no Apps Script — ela monta a aba
+**Resultados** com os 72 jogos listados (número, partida e data). Aí é só digitar os gols
+nas colunas "Gols time 1" e "Gols time 2" conforme os jogos terminam.
 
 Se alguém enviar palpites mais de uma vez, vale o último envio **antes do início de cada jogo** —
 palpite atrasado é ignorado automaticamente.

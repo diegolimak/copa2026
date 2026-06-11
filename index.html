@@ -188,6 +188,11 @@
   table.tabela tr:last-child td { border-bottom: none; }
   table.tabela tr.acertou { background: #e8f7e0; font-weight: 700; }
   .num { text-align: center; font-family: "Lilita One"; }
+  .titulo-jogo-palpites { font-family: "Asap"; font-size: 15px; font-weight: 700; color: var(--verde-escuro); margin: 24px 0 8px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .titulo-jogo-palpites .meta-jogo { font-size: 12px; font-weight: 600; color: #7a7868; }
+  table.tabela-compacta { font-size: 13px; margin-bottom: 4px; }
+  table.tabela-compacta th { padding: 7px 12px; font-size: 13px; }
+  table.tabela-compacta td { padding: 6px 12px; }
   .painel-cesta { background: linear-gradient(135deg, #fff3d6, #ffe6b0); border: 3px solid var(--amarelo); border-radius: 18px; padding: 22px; text-align: center; margin: 22px 0; box-shadow: 5px 5px 0 var(--sombra); transform: rotate(.4deg); }
   .painel-cesta .valor { font-family: "Lilita One"; font-size: 44px; color: var(--vermelho); }
   .painel-cesta .rotulo { font-weight: 700; font-size: 15px; color: var(--tinta); }
@@ -680,6 +685,8 @@ document.getElementById("btn-copiar").addEventListener("click", async (e) => {
 // TELA PALPITES
 // =====================================================
 let chipSelecionado = null;
+let vistaPalpites = "jogo"; // "jogo" = todos veem quem palpitou o quê | "pessoa" = palpites de um participante
+
 function renderPalpites() {
   const alvo = document.getElementById("conteudo-palpites");
   if (!PALPITES.length) {
@@ -687,11 +694,57 @@ function renderPalpites() {
       Ninguém palpitou ainda...<br><small>Os palpites aparecem aqui assim que alguém enviar.</small></div>`;
     return;
   }
-  if (chipSelecionado === null) chipSelecionado = 0;
-  let html = `<div class="chips">` + PALPITES.map((p, i) => {
-    const nome = `${p.nome} ${p.sobrenome||""}`.trim();
-    return `<button class="chip ${i===chipSelecionado?"ativo":""}" data-i="${i}">${nome}</button>`;
-  }).join("") + `</div>`;
+  let html = `<div class="chips" style="margin-bottom:14px">
+    <button class="chip ${vistaPalpites==="jogo"?"ativo":""}" data-vista="jogo">⚽ Por jogo</button>
+    <button class="chip ${vistaPalpites==="pessoa"?"ativo":""}" data-vista="pessoa">👤 Por pessoa</button>
+  </div>`;
+
+  html += vistaPalpites === "jogo" ? htmlPorJogo() : htmlPorPessoa();
+  alvo.innerHTML = html;
+
+  alvo.querySelectorAll("[data-vista]").forEach(b => b.addEventListener("click", () => {
+    vistaPalpites = b.dataset.vista; renderPalpites();
+  }));
+  alvo.querySelectorAll("[data-i]").forEach(c => c.addEventListener("click", () => {
+    chipSelecionado = +c.dataset.i; renderPalpites();
+  }));
+}
+
+// Visão por jogo: cada jogo com o nome de quem palpitou e o placar que falou
+function htmlPorJogo() {
+  let html = "";
+  for (const j of JOGOS) {
+    const linhas = PALPITES
+      .filter(p => p.palpites[j.id])
+      .map(p => ({ nome: nomeDe(p), pal: p.palpites[j.id] }));
+    if (!linhas.length) continue;
+    const r = RESULTADOS[j.id];
+    const pote = CONFIG.valorPorJogo * PALPITES.filter(p => participaDoJogo(p, j)).length;
+    const { dia, hora } = dataBonita(j.data);
+    html += `<h3 class="titulo-jogo-palpites">
+      <span class="badge-grupo">${j.grupo}</span>
+      ${flag(j.time1,j.f1)} <b>${j.time1} x ${j.time2}</b> ${flag(j.time2,j.f2)}
+      <span class="meta-jogo">· ${dia} ${hora} · pote ${fmtReal(pote)}${r ? ` · placar final <b>${r[0]} x ${r[1]}</b>` : ""}</span>
+    </h3>
+    <table class="tabela tabela-compacta"><tr><th>Quem palpitou</th><th>Placar</th>${r ? "<th></th>" : ""}</tr>`;
+    for (const l of linhas) {
+      const acertou = r && r[0]===l.pal[0] && r[1]===l.pal[1];
+      html += `<tr class="${acertou?"acertou":""}">
+        <td>${l.nome}</td>
+        <td class="num">${l.pal[0]} x ${l.pal[1]}</td>
+        ${r ? `<td class="num">${acertou ? "🎯 levou!" : "—"}</td>` : ""}
+      </tr>`;
+    }
+    html += `</table>`;
+  }
+  return html || `<div class="aviso-vazio"><span class="emoji">🦗</span>Nenhum palpite registrado ainda.</div>`;
+}
+
+// Visão por pessoa: todos os palpites de um participante
+function htmlPorPessoa() {
+  if (chipSelecionado === null || chipSelecionado >= PALPITES.length) chipSelecionado = 0;
+  let html = `<div class="chips">` + PALPITES.map((p, i) =>
+    `<button class="chip ${i===chipSelecionado?"ativo":""}" data-i="${i}">${nomeDe(p)}</button>`).join("") + `</div>`;
 
   const pessoa = PALPITES[chipSelecionado];
   const rotuloFiltro = { todos: "🌍 Todos os jogos", brasil: "🇧🇷 Só o Brasil", custom: "☑️ Jogos escolhidos" }[pessoa.filtro || "todos"];
@@ -711,9 +764,7 @@ function renderPalpites() {
       <td class="num">${r ? `${r[0]} x ${r[1]} ${acertou?"🎯":""}` : "—"}</td>
     </tr>`;
   }
-  html += `</table>`;
-  alvo.innerHTML = html;
-  alvo.querySelectorAll(".chip").forEach(c => c.addEventListener("click", () => { chipSelecionado = +c.dataset.i; renderPalpites(); }));
+  return html + `</table>`;
 }
 
 // =====================================================
