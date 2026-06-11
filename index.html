@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bolão da Copa 2026 ⚽ R$2 por jogo</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚽</text></svg>">
+<meta name="description" content="Bolão da Copa 2026 entre amigos: R$2 por jogo, acertou o placar exato levou o pote. Pote sem vencedor vira cesta básica!">
+<meta property="og:title" content="⚽ Bolão da Copa 2026 — R$2 por jogo">
+<meta property="og:description" content="Acertou o placar exato, levou o pote. Ninguém acertou? Vira cesta básica! 🧺 Aposte em todos os jogos, só nos do Brasil ou escolha os seus.">
+<meta property="og:type" content="website">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Asap:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -296,7 +301,7 @@
       <h2>📜 Como funciona</h2>
       <ol>
         <li>Escolha quais jogos quer apostar: <b>todos (72)</b>, <b>só os do Brasil (3)</b> ou <b>você mesmo seleciona</b>.</li>
-        <li>Cada jogo vale <b>R$ 2,00</b> por participante. Cada jogo tem seu próprio pote separado.</li>
+        <li>Cada jogo vale <b>R$ 2,00</b>. O pote de cada jogo é formado por <b>quem apostou naquele jogo</b> — se 10 pessoas apostaram, o pote é R$ 20.</li>
         <li>O palpite é o <b>placar exato do tempo normal</b> (90 min + acréscimos). Prorrogação e pênaltis não contam.</li>
         <li><b>Acertou o placar exato → leva o pote do jogo.</b> Mais de um acertador? Divide igual.</li>
         <li><b>Ninguém acertou?</b> O pote vai pro <b>fundo de cestas básicas</b> 🧺, doado no final da Copa.</li>
@@ -436,8 +441,8 @@ document.querySelectorAll("nav button").forEach(btn => {
     btn.classList.add("ativo");
     document.getElementById("tela-" + btn.dataset.tela).classList.add("ativa");
     document.getElementById("barra-envio").style.display = btn.dataset.tela === "palpitar" ? "" : "none";
-    if (btn.dataset.tela === "palpites") renderPalpites();
-    if (btn.dataset.tela === "apuracao") renderApuracao();
+    if (btn.dataset.tela === "palpites") { renderPalpites(); carregarDaPlanilha(); }
+    if (btn.dataset.tela === "apuracao") { renderApuracao(); carregarDaPlanilha(); }
   });
 });
 
@@ -709,8 +714,10 @@ function renderPalpites() {
   }).join("") + `</div>`;
 
   const pessoa = PALPITES[chipSelecionado];
-  const nome = `${pessoa.nome} ${pessoa.sobrenome||""}`.trim();
-  if (pessoa.telefone) html += `<p style="font-size:13px;margin-bottom:12px;color:#6b6a60">📱 ${pessoa.telefone}</p>`;
+  const rotuloFiltro = { todos: "🌍 Todos os jogos", brasil: "🇧🇷 Só o Brasil", custom: "☑️ Jogos escolhidos" }[pessoa.filtro || "todos"];
+  html += `<p style="font-size:13px;margin-bottom:12px;color:#6b6a60">
+    ${pessoa.telefone ? `📱 ${pessoa.telefone} &nbsp;·&nbsp; ` : ""}${rotuloFiltro}
+    &nbsp;·&nbsp; 💰 valor da aposta: <b>${fmtReal(valorDevido(pessoa))}</b></p>`;
   html += `<table class="tabela"><tr><th>#</th><th>Jogo</th><th>Palpite</th><th>Resultado</th></tr>`;
   for (const j of JOGOS) {
     const p = pessoa.palpites[j.id];
@@ -732,21 +739,45 @@ function renderPalpites() {
 // =====================================================
 // APURAÇÃO
 // =====================================================
+const nomeDe = p => `${p.nome} ${p.sobrenome||""}`.trim();
+
+// A pessoa participa do pote de um jogo conforme o filtro que escolheu:
+// todos = entra em todos os potes; brasil = só nos 3 do Brasil;
+// custom = só nos jogos em que registrou palpite.
+function participaDoJogo(p, j) {
+  const f = p.filtro || "todos";
+  if (f === "brasil") return IDS_BRASIL.has(j.id);
+  if (f === "custom") return !!p.palpites[j.id];
+  return true;
+}
+
+// Quanto cada participante deve pagar (pro organizador conferir o PIX)
+function valorDevido(p) {
+  const f = p.filtro || "todos";
+  if (f === "brasil") return IDS_BRASIL.size * CONFIG.valorPorJogo;
+  if (f === "custom") return Object.keys(p.palpites).length * CONFIG.valorPorJogo;
+  return JOGOS.length * CONFIG.valorPorJogo;
+}
+
 function apurar() {
   const ganhos = {}, acertos = {};
-  PALPITES.forEach(p => { const n = `${p.nome} ${p.sobrenome||""}`.trim(); ganhos[n]=0; acertos[n]=0; });
+  PALPITES.forEach(p => { ganhos[nomeDe(p)]=0; acertos[nomeDe(p)]=0; });
   let fundoCesta = 0;
   const porJogo = [];
-  const pote = CONFIG.valorPorJogo * PALPITES.length;
   for (const j of JOGOS) {
     const r = RESULTADOS[j.id]; if (!r) continue;
-    const vencedores = PALPITES.filter(p => { const pal = p.palpites[j.id]; return pal && pal[0]===r[0] && pal[1]===r[1]; })
-      .map(p => `${p.nome} ${p.sobrenome||""}`.trim());
+    // o pote de cada jogo é formado só por quem apostou nele
+    const membros = PALPITES.filter(p => participaDoJogo(p, j));
+    if (!membros.length) continue;
+    const pote = CONFIG.valorPorJogo * membros.length;
+    const vencedores = membros
+      .filter(p => { const pal = p.palpites[j.id]; return pal && pal[0]===r[0] && pal[1]===r[1]; })
+      .map(nomeDe);
     if (vencedores.length) vencedores.forEach(n => { ganhos[n] += pote/vencedores.length; acertos[n]++; });
     else fundoCesta += pote;
-    porJogo.push({ jogo:j, resultado:r, vencedores });
+    porJogo.push({ jogo:j, resultado:r, vencedores, pote });
   }
-  return { ganhos, acertos, fundoCesta, porJogo, pote };
+  return { ganhos, acertos, fundoCesta, porJogo };
 }
 
 function renderApuracao() {
@@ -756,7 +787,7 @@ function renderApuracao() {
       A apuração aparece aqui quando os primeiros resultados saírem.<br><small>Bola pra frente!</small></div>`;
     return;
   }
-  const { ganhos, acertos, fundoCesta, porJogo, pote } = apurar();
+  const { ganhos, acertos, fundoCesta, porJogo } = apurar();
   const ranking = Object.keys(ganhos).sort((a,b) => ganhos[b]-ganhos[a]);
   const medalha = i => ["🥇","🥈","🥉"][i] || `${i+1}º`;
   let html = `
@@ -770,12 +801,13 @@ function renderApuracao() {
     html += `<tr><td class="num">${medalha(i)}</td><td>${n}</td><td class="num">${acertos[n]} 🎯</td><td class="num">${fmtReal(ganhos[n])}</td></tr>`;
   });
   html += `</table>
-    <h2 class="titulo-rodada" style="margin-top:28px">⚽ Jogo a jogo (pote: ${fmtReal(pote)})</h2>
-    <table class="tabela"><tr><th>Jogo</th><th>Placar</th><th>Quem levou</th></tr>`;
-  for (const {jogo:j, resultado:r, vencedores} of porJogo) {
+    <h2 class="titulo-rodada" style="margin-top:28px">⚽ Jogo a jogo</h2>
+    <table class="tabela"><tr><th>Jogo</th><th>Placar</th><th>Pote</th><th>Quem levou</th></tr>`;
+  for (const {jogo:j, resultado:r, vencedores, pote} of porJogo) {
     html += `<tr>
       <td>${flag(j.time1,j.f1)} ${j.time1} x ${j.time2} ${flag(j.time2,j.f2)}</td>
       <td class="num">${r[0]} x ${r[1]}</td>
+      <td class="num">${fmtReal(pote)}</td>
       <td>${vencedores.length ? "🎯 "+vencedores.join(", ") : "🧺 cesta básica"}</td>
     </tr>`;
   }
@@ -803,10 +835,12 @@ function mesclarEnvios(envios) {
   envios.sort((a,b) => new Date(a.enviadoEm) - new Date(b.enviadoEm));
   for (const e of envios) {
     const chave = (e.nome+e.sobrenome).trim().toLowerCase().replace(/\s+/g,"");
-    if (!porNome.has(chave)) porNome.set(chave, { nome:e.nome, sobrenome:e.sobrenome||"", telefone:e.telefone||"", palpites:{} });
+    if (!porNome.has(chave)) porNome.set(chave, { nome:e.nome, sobrenome:e.sobrenome||"", telefone:e.telefone||"", filtro:e.filtro||"todos", palpites:{} });
+    const pessoa = porNome.get(chave);
+    pessoa.filtro = e.filtro || pessoa.filtro; // envios em ordem cronológica: vale o último filtro
     const t = new Date(e.enviadoEm).getTime();
     for (const id in e.palpites) {
-      if (inicio[id] && t < inicio[id]) porNome.get(chave).palpites[id] = e.palpites[id];
+      if (inicio[id] && t < inicio[id]) pessoa.palpites[id] = e.palpites[id];
     }
   }
   return [...porNome.values()];
@@ -835,6 +869,8 @@ async function carregarDaPlanilha() {
 renderJogos();
 renderSelos();
 carregarDaPlanilha();
+// mantém placares e apuração frescos pra quem deixa a página aberta
+setInterval(carregarDaPlanilha, 120000);
 </script>
 </body>
 </html>
