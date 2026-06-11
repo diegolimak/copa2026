@@ -122,17 +122,12 @@
   .jogo:hover:not(.fechado) { transform: rotate(0) scale(1.012); border-color: var(--verde); }
   .jogo.preenchido { border-color: var(--verde); background: #f4fbf2; }
   .jogo.fechado { opacity: .62; background: var(--papel-escuro); }
-  .jogo.inativo { opacity: .38; background: var(--papel-escuro); transform: none !important; }
-  .jogo.inativo .gols { background: #ddd5bb; border-color: #b3ab90; }
 
   .jogo-topo { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
   .jogo-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: #7a7868; }
   .badge-grupo { font-family: "Lilita One"; background: var(--verde); color: var(--branco); border-radius: 50%; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
   .badge-num { font-weight: 700; color: var(--azul); }
   .badge-fechado { font-weight: 700; color: var(--vermelho); }
-  .toggle-jogo { display: none; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--verde-escuro); user-select: none; }
-  .toggle-jogo input { width: 17px; height: 17px; accent-color: var(--verde); cursor: pointer; }
-  .modo-custom .toggle-jogo { display: flex; }
 
   .placar { display: grid; grid-template-columns: 1fr 52px 18px 52px 1fr; align-items: center; gap: 8px; }
   .time { font-weight: 700; font-size: clamp(13px, 3.4vw, 16px); display: flex; align-items: center; gap: 7px; }
@@ -277,7 +272,7 @@
         </button>
         <button class="filtro-btn" data-filtro="custom">
           ☑️ Escolher jogos
-          <span class="filtro-sub">você decide</span>
+          <span class="filtro-sub">R$ 2 por jogo preenchido</span>
         </button>
       </div>
     </div>
@@ -300,7 +295,7 @@
     <div class="regras">
       <h2>📜 Como funciona</h2>
       <ol>
-        <li>Escolha quais jogos quer apostar: <b>todos (72)</b>, <b>só os do Brasil (3)</b> ou <b>você mesmo seleciona</b>.</li>
+        <li>Escolha como apostar: <b>todos os jogos (72 · R$ 144)</b>, <b>só os do Brasil (3 · R$ 6)</b> ou <b>escolher jogos</b> — nesse modo você preenche só os placares que quiser e paga <b>R$ 2 por jogo preenchido</b>.</li>
         <li>Cada jogo vale <b>R$ 2,00</b>. O pote de cada jogo é formado por <b>quem apostou naquele jogo</b> — se 10 pessoas apostaram, o pote é R$ 20.</li>
         <li>O palpite é o <b>placar exato do tempo normal</b> (90 min + acréscimos). Prorrogação e pênaltis não contam.</li>
         <li><b>Acertou o placar exato → leva o pote do jogo.</b> Mais de um acertador? Divide igual.</li>
@@ -416,20 +411,24 @@ function dataBonita(iso) {
 // =====================================================
 // ESTADO LOCAL
 // =====================================================
-let rascunho = { nome:"", sobrenome:"", telefone:"", filtro:"todos", jogosInativos:{}, palpites:{} };
+let rascunho = { nome:"", sobrenome:"", telefone:"", filtro:"todos", palpites:{} };
 try { rascunho = Object.assign(rascunho, JSON.parse(localStorage.getItem("bolao2026") || "{}")); } catch(e) {}
 const salvaRascunho = () => localStorage.setItem("bolao2026", JSON.stringify(rascunho));
 
 function jogosVisiveis() {
   if (rascunho.filtro === "brasil") return JOGOS.filter(j => IDS_BRASIL.has(j.id));
-  return JOGOS; // todos e custom mostram todos (custom usa toggles)
+  return JOGOS;
 }
 function jogosAtivos() {
   if (rascunho.filtro === "brasil") return JOGOS.filter(j => IDS_BRASIL.has(j.id));
-  if (rascunho.filtro === "custom") return JOGOS.filter(j => !rascunho.jogosInativos[j.id]);
   return JOGOS;
 }
-function valorTotal() { return jogosAtivos().length * CONFIG.valorPorJogo; }
+// No modo "escolher", você paga só pelos jogos cujo placar preencheu
+function valorTotal() {
+  if (rascunho.filtro === "custom")
+    return jogosAtivos().filter(j => !jogoFechado(j) && palpiteCompleto(j.id)).length * CONFIG.valorPorJogo;
+  return jogosAtivos().length * CONFIG.valorPorJogo;
+}
 
 // =====================================================
 // NAVEGAÇÃO
@@ -476,10 +475,6 @@ if (btnFiltroSalvo) { document.querySelectorAll(".filtro-btn").forEach(b => b.cl
 // =====================================================
 function renderJogos() {
   const alvo = document.getElementById("lista-jogos");
-  const isCustom = rascunho.filtro === "custom";
-  if (isCustom) alvo.classList.add("modo-custom");
-  else alvo.classList.remove("modo-custom");
-
   let html = "", rodadaAtual = "", diaAtual = "";
   for (const j of jogosVisiveis()) {
     if (j.rodada !== rodadaAtual) {
@@ -489,11 +484,9 @@ function renderJogos() {
     const {dia, hora, semana} = dataBonita(j.data);
     if (dia !== diaAtual) { diaAtual = dia; html += `<div class="titulo-dia">${semana} · ${dia}</div>`; }
     const fechado = jogoFechado(j);
-    const inativo = isCustom && !!rascunho.jogosInativos[j.id];
     const p = rascunho.palpites[j.id] || ["",""];
-    const checked = inativo ? "" : "checked";
     html += `
-    <div class="jogo${fechado?" fechado":""}${inativo?" inativo":""}" id="jogo-${j.id}">
+    <div class="jogo${fechado?" fechado":""}" id="jogo-${j.id}">
       <div class="jogo-topo">
         <div class="jogo-meta">
           <span class="badge-grupo">${j.grupo}</span>
@@ -501,23 +494,18 @@ function renderJogos() {
           <span>🕐 ${hora}</span><span>📍 ${j.cidade}</span>
           ${fechado ? '<span class="badge-fechado">🔒 encerrado</span>' : ""}
         </div>
-        <label class="toggle-jogo">
-          <input type="checkbox" class="cb-jogo" data-jogo="${j.id}" ${checked} ${fechado?"disabled":""}>
-          Apostar
-        </label>
       </div>
       <div class="placar">
         <div class="time casa"><span class="nome-time">${j.time1}</span> <span class="bandeira">${flag(j.time1,j.f1)}</span></div>
-        <input class="gols" type="number" min="0" max="20" inputmode="numeric" data-jogo="${j.id}" data-lado="0" value="${p[0]}" ${fechado||inativo?"disabled":""}>
+        <input class="gols" type="number" min="0" max="20" inputmode="numeric" data-jogo="${j.id}" data-lado="0" value="${p[0]}" ${fechado?"disabled":""}>
         <div class="x">x</div>
-        <input class="gols" type="number" min="0" max="20" inputmode="numeric" data-jogo="${j.id}" data-lado="1" value="${p[1]}" ${fechado||inativo?"disabled":""}>
+        <input class="gols" type="number" min="0" max="20" inputmode="numeric" data-jogo="${j.id}" data-lado="1" value="${p[1]}" ${fechado?"disabled":""}>
         <div class="time fora"><span class="bandeira">${flag(j.time2,j.f2)}</span> <span class="nome-time">${j.time2}</span></div>
       </div>
     </div>`;
   }
   alvo.innerHTML = html;
 
-  // eventos de placar
   alvo.querySelectorAll(".gols").forEach(inp => {
     inp.addEventListener("input", () => {
       const id = inp.dataset.jogo, lado = +inp.dataset.lado;
@@ -527,20 +515,6 @@ function renderJogos() {
       salvaRascunho(); atualizaProgresso(); marcaPreenchido(id);
     });
     marcaPreenchido(inp.dataset.jogo);
-  });
-
-  // toggles de jogo (modo custom)
-  alvo.querySelectorAll(".cb-jogo").forEach(cb => {
-    cb.addEventListener("change", () => {
-      const id = cb.dataset.jogo;
-      if (cb.checked) delete rascunho.jogosInativos[id];
-      else rascunho.jogosInativos[id] = 1;
-      salvaRascunho();
-      const card = document.getElementById("jogo-" + id);
-      card.classList.toggle("inativo", !cb.checked);
-      card.querySelectorAll(".gols").forEach(g => { g.disabled = !cb.checked; if (!cb.checked) g.value = ""; });
-      atualizaProgresso();
-    });
   });
 
   atualizaProgresso();
@@ -559,8 +533,14 @@ function atualizaProgresso() {
   const ativos = jogosAtivos().filter(j => !jogoFechado(j));
   const feitos = ativos.filter(j => palpiteCompleto(j.id)).length;
   const total = ativos.length;
-  document.getElementById("texto-progresso").textContent =
-    `${feitos}/${total} palpites` + (feitos === total && total ? " ✅" : "");
+  if (rascunho.filtro === "custom") {
+    document.getElementById("texto-progresso").textContent = feitos
+      ? `${feitos} jogo${feitos>1?"s":""} escolhido${feitos>1?"s":""} · ${fmtReal(CONFIG.valorPorJogo)} cada`
+      : "preencha o placar dos jogos que você quer apostar";
+  } else {
+    document.getElementById("texto-progresso").textContent =
+      `${feitos}/${total} palpites` + (feitos === total && total ? " ✅" : "");
+  }
   document.getElementById("fill-progresso").style.width = total ? (100*feitos/total)+"%" : "0%";
   document.getElementById("valor-barra").textContent = fmtReal(valorTotal());
 }
@@ -613,7 +593,7 @@ function textoZap(envio) {
     const p = envio.palpites[j.id];
     if (p) t += `${j.id}. ${j.f1} ${j.time1} ${p[0]} x ${p[1]} ${j.time2} ${j.f2}\n`;
   }
-  t += `\n💰 Valor: ${fmtReal(jogosAtivos().length * CONFIG.valorPorJogo)}\n`;
+  t += `\n💰 Valor: ${fmtReal(valorTotal())}\n`;
   t += `PIX: ${CONFIG.pix.chave} (${CONFIG.pix.nome})`;
   return t;
 }
@@ -627,7 +607,7 @@ document.getElementById("btn-enviar").addEventListener("click", () => {
 
   const nomeCompleto = `${envio.nome} ${envio.sobrenome}`.trim();
   const total = valorTotal();
-  const jogos = jogosAtivos().length;
+  const jogos = envio.filtro === "custom" ? Object.keys(envio.palpites).length : jogosAtivos().length;
 
   document.getElementById("resumo-participante").innerHTML =
     `<span>👤 <b>${nomeCompleto}</b></span><span>📱 ${envio.telefone}</span><br>` +
