@@ -140,6 +140,7 @@
   .gols:focus { background: #fff8dd; border-color: var(--amarelo); }
   .gols:disabled { background: #ddd5bb; border-color: #b3ab90; }
   img.flagimg { height: 22px; vertical-align: -4px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
+  .aviso-repetido { margin-top: 9px; background: #fff3d6; border: 2px dashed var(--amarelo); border-radius: 10px; padding: 7px 12px; font-size: 13px; font-weight: 600; color: #7a5800; line-height: 1.5; }
 
   /* -------- BARRA INFERIOR -------- */
   .barra-envio { position: fixed; bottom: 0; left: 0; right: 0; z-index: 60; background: var(--verde-escuro); color: var(--branco); display: flex; align-items: center; gap: 14px; padding: 12px 16px; box-shadow: 0 -4px 16px rgba(0,0,0,.25); }
@@ -507,6 +508,7 @@ function renderJogos() {
         <input class="gols" type="number" min="0" max="20" inputmode="numeric" data-jogo="${j.id}" data-lado="1" value="${p[1]}" ${fechado?"disabled":""}>
         <div class="time fora"><span class="bandeira">${flag(j.time2,j.f2)}</span> <span class="nome-time">${j.time2}</span></div>
       </div>
+      <div class="aviso-repetido" id="aviso-${j.id}" hidden></div>
     </div>`;
   }
   alvo.innerHTML = html;
@@ -517,12 +519,13 @@ function renderJogos() {
       if (!rascunho.palpites[id]) rascunho.palpites[id] = ["",""];
       rascunho.palpites[id][lado] = inp.value === "" ? "" : Math.max(0, Math.min(20, parseInt(inp.value,10)||0));
       if (inp.value !== "" && String(rascunho.palpites[id][lado]) !== inp.value) inp.value = rascunho.palpites[id][lado];
-      salvaRascunho(); atualizaProgresso(); marcaPreenchido(id);
+      salvaRascunho(); atualizaProgresso(); marcaPreenchido(id); avisaRepetido(id);
     });
     marcaPreenchido(inp.dataset.jogo);
   });
 
   atualizaProgresso();
+  atualizaAvisos();
 }
 
 function palpiteCompleto(id) {
@@ -533,6 +536,27 @@ function marcaPreenchido(id) {
   const el = document.getElementById("jogo-" + id);
   if (el) el.classList.toggle("preenchido", palpiteCompleto(id));
 }
+
+// Aviso: se outra pessoa já escolheu o mesmo placar, o pote será dividido
+const chaveNome = (n, s) => ((n||"")+(s||"")).trim().toLowerCase().replace(/\s+/g,"");
+function avisaRepetido(id) {
+  const el = document.getElementById("aviso-" + id);
+  if (!el) return;
+  if (!palpiteCompleto(id)) { el.hidden = true; return; }
+  const p = rascunho.palpites[id];
+  const eu = chaveNome(rascunho.nome, rascunho.sobrenome);
+  const iguais = PALPITES
+    .filter(o => chaveNome(o.nome, o.sobrenome) !== eu)
+    .filter(o => { const pal = o.palpites[id]; return pal && +pal[0] === +p[0] && +pal[1] === +p[1]; })
+    .map(nomeDe);
+  if (iguais.length) {
+    el.innerHTML = `⚠️ O placar <b>${p[0]} x ${p[1]}</b> já foi escolhido por <b>${iguais.join(", ")}</b> — se acertar, o pote será dividido entre vocês.`;
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+function atualizaAvisos() { JOGOS.forEach(j => avisaRepetido(String(j.id))); }
 
 function atualizaProgresso() {
   const ativos = jogosAtivos().filter(j => !jogoFechado(j));
@@ -747,7 +771,9 @@ function htmlPorPessoa() {
     `<button class="chip ${i===chipSelecionado?"ativo":""}" data-i="${i}">${nomeDe(p)}</button>`).join("") + `</div>`;
 
   const pessoa = PALPITES[chipSelecionado];
-  const rotuloFiltro = { todos: "🌍 Todos os jogos", brasil: "🇧🇷 Só o Brasil", custom: "☑️ Jogos escolhidos" }[pessoa.filtro || "todos"];
+  const nomesFiltro = { todos: "🌍 Todos os jogos", brasil: "🇧🇷 Só o Brasil", custom: "☑️ Jogos escolhidos" };
+  const rotuloFiltro = (pessoa.filtros ? [...pessoa.filtros] : [pessoa.filtro || "todos"])
+    .map(f => nomesFiltro[f] || f).join(" + ");
   html += `<p style="font-size:13px;margin-bottom:12px;color:#6b6a60">
     ${pessoa.telefone ? `📱 ${pessoa.telefone} &nbsp;·&nbsp; ` : ""}${rotuloFiltro}
     &nbsp;·&nbsp; 💰 valor da aposta: <b>${fmtReal(valorDevido(pessoa))}</b></p>`;
@@ -776,6 +802,7 @@ const nomeDe = p => `${p.nome} ${p.sobrenome||""}`.trim();
 // todos = entra em todos os potes; brasil = só nos 3 do Brasil;
 // custom = só nos jogos em que registrou palpite.
 function participaDoJogo(p, j) {
+  if (p.jogos) return p.jogos.has(j.id); // dados da planilha: união de todos os envios
   const f = p.filtro || "todos";
   if (f === "brasil") return IDS_BRASIL.has(j.id);
   if (f === "custom") return !!p.palpites[j.id];
@@ -784,6 +811,7 @@ function participaDoJogo(p, j) {
 
 // Quanto cada participante deve pagar (pro organizador conferir o PIX)
 function valorDevido(p) {
+  if (p.jogos) return p.jogos.size * CONFIG.valorPorJogo;
   const f = p.filtro || "todos";
   if (f === "brasil") return IDS_BRASIL.size * CONFIG.valorPorJogo;
   if (f === "custom") return Object.keys(p.palpites).length * CONFIG.valorPorJogo;
@@ -866,12 +894,21 @@ function mesclarEnvios(envios) {
   envios.sort((a,b) => new Date(a.enviadoEm) - new Date(b.enviadoEm));
   for (const e of envios) {
     const chave = (e.nome+e.sobrenome).trim().toLowerCase().replace(/\s+/g,"");
-    if (!porNome.has(chave)) porNome.set(chave, { nome:e.nome, sobrenome:e.sobrenome||"", telefone:e.telefone||"", filtro:e.filtro||"todos", palpites:{} });
+    if (!porNome.has(chave)) porNome.set(chave, { nome:e.nome, sobrenome:e.sobrenome||"", telefone:e.telefone||"", filtros:new Set(), jogos:new Set(), palpites:{} });
     const pessoa = porNome.get(chave);
-    pessoa.filtro = e.filtro || pessoa.filtro; // envios em ordem cronológica: vale o último filtro
+    if (e.telefone) pessoa.telefone = e.telefone;
+    const f = e.filtro || "todos";
+    pessoa.filtros.add(f);
+    // A participação ACUMULA entre envios: quem entrou num pote não sai dele.
+    // (Antes valia só o último filtro, o que excluía palpites de envios anteriores.)
+    if (f === "todos") JOGOS.forEach(j => pessoa.jogos.add(j.id));
+    else if (f === "brasil") IDS_BRASIL.forEach(id => pessoa.jogos.add(id));
     const t = new Date(e.enviadoEm).getTime();
     for (const id in e.palpites) {
-      if (inicio[id] && t < inicio[id]) pessoa.palpites[id] = e.palpites[id];
+      if (inicio[id] && t < inicio[id]) {
+        pessoa.palpites[id] = e.palpites[id];
+        if (f === "custom") pessoa.jogos.add(Number(id));
+      }
     }
   }
   return [...porNome.values()];
@@ -886,6 +923,7 @@ async function carregarDaPlanilha() {
     PALPITES = mesclarEnvios(dados.palpites);
     RESULTADOS = dados.resultados || {};
     renderSelos();
+    atualizaAvisos();
     const tela = document.querySelector("nav button.ativo").dataset.tela;
     if (tela === "palpites") { chipSelecionado = null; renderPalpites(); }
     if (tela === "apuracao") renderApuracao();
