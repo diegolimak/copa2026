@@ -436,8 +436,10 @@ const _jaEnviou = localStorage.getItem("bolao2026_enviado");
 if (_jaEnviou) document.getElementById("banner-enviado").classList.add("visivel");
 
 function jogosVisiveis() {
-  if (rascunho.filtro === "brasil") return JOGOS.filter(j => IDS_BRASIL.has(j.id));
-  return JOGOS;
+  const base = rascunho.filtro === "brasil" ? JOGOS.filter(j => IDS_BRASIL.has(j.id)) : JOGOS;
+  const abertos = base.filter(j => !jogoFechado(j)).sort((a,b) => new Date(a.data)-new Date(b.data));
+  const fechados = base.filter(j => jogoFechado(j)).sort((a,b) => new Date(a.data)-new Date(b.data));
+  return [...abertos, ...fechados];
 }
 function jogosAtivos() {
   if (rascunho.filtro === "brasil") return JOGOS.filter(j => IDS_BRASIL.has(j.id));
@@ -495,15 +497,22 @@ if (btnFiltroSalvo) { document.querySelectorAll(".filtro-btn").forEach(b => b.cl
 // =====================================================
 function renderJogos() {
   const alvo = document.getElementById("lista-jogos");
-  let html = "", rodadaAtual = "", diaAtual = "";
+  let html = "", emFechados = false, rodadaAtual = "", diaAtual = "";
   for (const j of jogosVisiveis()) {
-    if (j.rodada !== rodadaAtual) {
-      rodadaAtual = j.rodada; diaAtual = "";
-      html += `<h2 class="titulo-rodada">📅 ${j.rodada}</h2>`;
-    }
-    const {dia, hora, semana} = dataBonita(j.data);
-    if (dia !== diaAtual) { diaAtual = dia; html += `<div class="titulo-dia">${semana} · ${dia}</div>`; }
     const fechado = jogoFechado(j);
+    if (fechado && !emFechados) {
+      emFechados = true; rodadaAtual = ""; diaAtual = "";
+      html += `<h2 class="titulo-rodada" style="margin-top:28px;opacity:.5">🔒 Jogos encerrados</h2>`;
+    }
+    if (!fechado) {
+      if (j.rodada !== rodadaAtual) {
+        rodadaAtual = j.rodada; diaAtual = "";
+        html += `<h2 class="titulo-rodada">📅 ${j.rodada}</h2>`;
+      }
+      const {dia, semana} = dataBonita(j.data);
+      if (dia !== diaAtual) { diaAtual = dia; html += `<div class="titulo-dia">${semana} · ${dia}</div>`; }
+    }
+    const {hora} = dataBonita(j.data);
     const p = rascunho.palpites[j.id] || ["",""];
     html += `
     <div class="jogo${fechado?" fechado":""}" id="jogo-${j.id}">
