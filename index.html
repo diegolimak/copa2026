@@ -95,6 +95,8 @@
   .campo input:focus { border-style: solid; background: var(--branco); }
   .campo input.erro { border-color: var(--vermelho); border-style: solid; }
   .cartao-nome .dica { font-size: 12px; margin-top: 10px; color: #6b6a60; }
+  .banner-enviado { display:none; margin-bottom:16px; background:#e6f9ed; border:2px solid var(--verde); border-radius:14px; padding:12px 16px; font-weight:700; color:var(--verde-escuro); font-size:14px; }
+  .banner-enviado.visivel { display:block; }
 
   /* -------- FILTRO DE JOGOS -------- */
   .filtro-bloco { background: var(--branco); border: 3px solid var(--amarelo); border-radius: 16px; padding: 18px; box-shadow: 5px 5px 0 var(--sombra); margin-bottom: 22px; transform: rotate(.3deg); }
@@ -245,6 +247,10 @@
 
   <!-- ============ PALPITAR ============ -->
   <section id="tela-palpitar" class="tela ativa">
+
+    <div id="banner-enviado" class="banner-enviado">
+      ✅ Você já enviou seus palpites! Se quiser corrigir algo antes de um jogo começar, preencha e envie novamente.
+    </div>
 
     <div class="cartao-nome">
       <div class="titulo-campo">✍️ Seus dados</div>
@@ -420,6 +426,14 @@ function dataBonita(iso) {
 let rascunho = { nome:"", sobrenome:"", telefone:"", filtro:"todos", palpites:{} };
 try { rascunho = Object.assign(rascunho, JSON.parse(localStorage.getItem("bolao2026") || "{}")); } catch(e) {}
 const salvaRascunho = () => localStorage.setItem("bolao2026", JSON.stringify(rascunho));
+
+function marcaEnviado(nome) {
+  localStorage.setItem("bolao2026_enviado", nome);
+  document.getElementById("banner-enviado").classList.add("visivel");
+}
+// Mostra banner se já enviou antes neste navegador
+const _jaEnviou = localStorage.getItem("bolao2026_enviado");
+if (_jaEnviou) document.getElementById("banner-enviado").classList.add("visivel");
 
 function jogosVisiveis() {
   if (rascunho.filtro === "brasil") return JOGOS.filter(j => IDS_BRASIL.has(j.id));
@@ -671,6 +685,7 @@ document.getElementById("btn-confirmar").addEventListener("click", async functio
       document.getElementById("modal-status").textContent =
         `Arrasou, ${envio.nome}! Seus palpites estão registrados. Se ainda não fez o PIX, faz agora! 💸`;
       this.textContent = "✅ Enviado!";
+      marcaEnviado(`${envio.nome} ${envio.sobrenome}`.trim());
       carregarDaPlanilha();
     } catch (err) {
       document.getElementById("modal-titulo").textContent = "⚠️ Não consegui salvar";

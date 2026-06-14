@@ -109,9 +109,18 @@ function doPost(e) {
     if (!nome || !d.palpites || typeof d.palpites !== "object") {
       return resposta({ ok: false, erro: "dados incompletos" });
     }
-    garanteAba(ABA_PALPITES,
-      ["Quando (servidor)", "Nome", "Sobrenome", "Telefone", "Filtro", "Palpites (JSON)"])
-      .appendRow([new Date(), nome, sobrenome, telefone, filtro, JSON.stringify(d.palpites)]);
+    const aba = garanteAba(ABA_PALPITES,
+      ["Quando (servidor)", "Nome", "Sobrenome", "Telefone", "Filtro", "Palpites (JSON)"]);
+    // Remove linhas anteriores do mesmo nome+sobrenome+filtro para evitar duplicatas
+    const chave = (nome + sobrenome).toLowerCase().replace(/\s+/g, "");
+    const linhas = aba.getDataRange().getValues();
+    for (let i = linhas.length - 1; i >= 1; i--) {
+      const chaveLinha = (String(linhas[i][1]) + String(linhas[i][2])).toLowerCase().replace(/\s+/g, "");
+      if (chaveLinha === chave && String(linhas[i][4]) === filtro) {
+        aba.deleteRow(i + 1);
+      }
+    }
+    aba.appendRow([new Date(), nome, sobrenome, telefone, filtro, JSON.stringify(d.palpites)]);
     return resposta({ ok: true });
   } catch (err) {
     return resposta({ ok: false, erro: String(err) });
